@@ -115,7 +115,7 @@ if "user_id" not in st.session_state:
             if user:
                 st.session_state["user_id"] = user.id
                 st.success(f"Logged in as {username}")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Invalid credentials")
         else:
