@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 # -------------------- ENV --------------------
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") + "?sslmode=require"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not DATABASE_URL:
