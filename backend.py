@@ -7,6 +7,7 @@ from pgvector.sqlalchemy import Vector
 from openai import OpenAI
 from sqlalchemy.sql import text as sql_text
 from sqlalchemy.exc import ProgrammingError
+from sqlalchemy import text
 
 # -------------------- ENV --------------------
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -48,7 +49,7 @@ class TelegramSession(Base):
     user_id = Column(Integer)
 
 # -------------------- DATABASE SETUP --------------------
-from sqlalchemy import text
+
 
 try:
     with engine.connect() as conn:
