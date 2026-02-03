@@ -1,30 +1,73 @@
 import streamlit as st
 import hashlib
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, Column, Integer, Text, text
+from sqlalchemy.orm import sessionmaker, declarative_base
 from pgvector.sqlalchemy import Vector
 from openai import OpenAI
 import os
+from sqlalchemy.exc import ProgrammingError
 
-# -------------------- CONFIG --------------------
-st.set_page_config(page_title="Client KB Manager", layout="centered")
-
+# -------------------- ENV --------------------
 DATABASE_URL = os.getenv("DATABASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-if not DATABASE_URL or not OPENAI_API_KEY:
-    raise RuntimeError("DATABASE_URL and OPENAI_API_KEY must be set")
-
+# -------------------- DB --------------------
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
 
+# -------------------- MODELS --------------------
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    username = Column(Text, unique=True)
+    password_hash = Column(Text)
+    token = Column(Text, unique=True)
+
+class Document(Base):
+    __tablename__ = "documents"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+    filename = Column(Text)
+    file_hash = Column(Text)
+
+class Chunk(Base):
+    __tablename__ = "document_chunks"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+    document_id = Column(Integer)
+    chunk_text = Column(Text)
+    chunk_hash = Column(Text)
+    embedding = Column(Vector(1536))
+
+class TelegramSession(Base):
+    __tablename__ = "telegram_sessions"
+    chat_id = Column(Text, primary_key=True)
+    user_id = Column(Integer)
+
+# -------------------- DATABASE SETUP --------------------
+try:
+    with engine.connect() as conn:
+        # Create pgvector extension if not exists
+        conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        conn.commit()
+except ProgrammingError:
+    pass
+
+# Create tables if missing
+Base.metadata.create_all(engine)
+
+# -------------------- AI --------------------
 openai_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENAI_API_KEY)
 
 def embed_text(text_value: str):
     return openai_client.embeddings.create(
-        model="text-embedding-3-large",
+        model="mistralai/mixtral-8x7b-instruct",
         input=text_value
     ).data[0].embedding
+
+# -------------------- STREAMLIT --------------------
+st.title("Client Knowledge Base Manager")
 
 # -------------------- AUTH --------------------
 def hash_password(password: str):
@@ -47,10 +90,7 @@ def signup(username, password, token=None):
             {"u": username, "p": hash_password(password), "t": token}
         )
         db.commit()
-        user = db.execute(
-            text("SELECT * FROM users WHERE username=:u"),
-            {"u": username}
-        ).fetchone()
+        user = db.execute(text("SELECT * FROM users WHERE username=:u"), {"u": username}).fetchone()
     except:
         db.rollback()
         user = None
@@ -84,11 +124,11 @@ if "user_id" not in st.session_state:
                 st.experimental_rerun()
             else:
                 st.error("Username already exists")
+
 else:
     user_id = st.session_state["user_id"]
 
-    st.title("📚 Knowledge Base Manager")
-    uploaded_file = st.file_uploader("Upload text file", type=["txt"])
+    uploaded_file = st.file_uploader("Upload text file")
 
     if uploaded_file:
         raw_bytes = uploaded_file.read()
@@ -106,7 +146,7 @@ else:
         ).fetchone()
 
         if exists:
-            st.warning("⚠️ Duplicate file already exists.")
+            st.warning("Duplicate file already exists.")
         else:
             result = db.execute(
                 text("""
@@ -119,11 +159,10 @@ else:
             document_id = result.fetchone()[0]
 
             chunks = [content[i:i+500] for i in range(0, len(content), 500)]
-            progress = st.progress(0)
-
             for idx, chunk in enumerate(chunks):
                 chunk_hash = hashlib.sha256(chunk.encode()).hexdigest()
                 embedding = embed_text(chunk)
+
                 db.execute(
                     text("""
                         INSERT INTO document_chunks
@@ -138,12 +177,10 @@ else:
                         "emb": Vector(embedding)
                     }
                 )
-                progress.progress((idx+1)/len(chunks))
 
             db.commit()
-            st.success("✅ File uploaded and indexed successfully!")
-            st.balloons()
+            st.success("File uploaded and indexed successfully.")
 
     if st.button("Logout"):
         st.session_state.pop("user_id")
-        st.rerun()
+        st.experimental_rerun()
