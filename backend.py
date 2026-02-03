@@ -48,13 +48,15 @@ class TelegramSession(Base):
     user_id = Column(Integer)
 
 # -------------------- DATABASE SETUP --------------------
+from sqlalchemy import text
+
 try:
     with engine.connect() as conn:
-        # Create pgvector extension if not exists
-        conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         conn.commit()
 except ProgrammingError:
     pass
+
 
 # Create tables if missing
 Base.metadata.create_all(engine)
