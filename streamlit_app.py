@@ -15,11 +15,11 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 
 # -------------------- AI --------------------
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+openai_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENAI_API_KEY)
 
 def embed_text(text_value: str):
     return openai_client.embeddings.create(
-        model="text-embedding-3-small",
+        model="mistralai/mixtral-8x7b-instruct",
         input=text_value
     ).data[0].embedding
 
