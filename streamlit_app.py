@@ -123,7 +123,7 @@ if "user_id" not in st.session_state:
             if user:
                 st.session_state["user_id"] = user.id
                 st.success(f"Account created for {username}")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Username already exists")
 
@@ -185,4 +185,4 @@ else:
 
     if st.button("Logout"):
         st.session_state.pop("user_id")
-        st.experimental_rerun()
+        st.rerun()
