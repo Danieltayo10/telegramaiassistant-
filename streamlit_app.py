@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, Column, Integer, Text, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from pgvector.sqlalchemy import Vector
 from openai import OpenAI
+from sqlalchemy import text
 import os
 from sqlalchemy.exc import ProgrammingError
 
@@ -46,10 +47,11 @@ class TelegramSession(Base):
     user_id = Column(Integer)
 
 # -------------------- DATABASE SETUP --------------------
+
+
 try:
     with engine.connect() as conn:
-        # Create pgvector extension if not exists
-        conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         conn.commit()
 except ProgrammingError:
     pass
