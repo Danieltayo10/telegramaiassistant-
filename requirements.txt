@@ -7,3 +7,4 @@ openai
 requests
 streamlit
 python-dotenv
+docx2txt
