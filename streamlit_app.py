@@ -168,20 +168,15 @@ else:
                 chunk_hash = hashlib.sha256(chunk.encode()).hexdigest()
                 embedding = embed_text(chunk)
 
-                db.execute(
-                    text("""
-                        INSERT INTO document_chunks
-                        (user_id, document_id, chunk_text, chunk_hash, embedding)
-                        VALUES (:uid,:did,:ct,:ch,:emb)
-                    """),
-                    {
-                        "uid": user_id,
-                        "did": document_id,
-                        "ct": sanitize_text(chunk),  # ✅ FIX
-                        "ch": chunk_hash,
-                        "emb": Vector(embedding)
-                    }
+                # -------------------- FIXED INSERT --------------------
+                new_chunk = Chunk(
+                    user_id=user_id,
+                    document_id=document_id,
+                    chunk_text=sanitize_text(chunk),
+                    chunk_hash=chunk_hash,
+                    embedding=embedding  # ✅ pass as list of floats, ORM handles Vector
                 )
+                db.add(new_chunk)
 
             db.commit()
             st.success("File uploaded and indexed successfully.")
@@ -193,6 +188,7 @@ else:
 
 # ===================== FASTAPI BACKEND =====================
 from fastapi import FastAPI, Request
+import requests
 
 # -------------------- FASTAPI --------------------
 app = FastAPI()
