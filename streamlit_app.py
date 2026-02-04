@@ -63,7 +63,7 @@ openai_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENAI_A
 
 def embed_text(text_value: str):
     return openai_client.embeddings.create(
-        model="mistralai/mixtral-8x7b-instruct",
+        model="text-embedding-3-small",
         input=text_value
     ).data[0].embedding
 
