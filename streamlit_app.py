@@ -7,6 +7,8 @@ from pgvector.sqlalchemy import Vector
 from openai import OpenAI
 from sqlalchemy.exc import ProgrammingError
 import os
+import docx2txt
+import PyPDF2
 
 # -------------------- ENV --------------------
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -131,16 +133,38 @@ if "user_id" not in st.session_state:
 else:
     user_id = st.session_state["user_id"]
 
-    uploaded_file = st.file_uploader("Upload text file")
+    uploaded_file = st.file_uploader("Upload a file")
 
     if uploaded_file:
-        raw_bytes = uploaded_file.read()
-        try:
-            content = raw_bytes.decode("utf-8")
-        except UnicodeDecodeError:
-            content = raw_bytes.decode("latin-1")
+        file_bytes = uploaded_file.read()
+        file_ext = uploaded_file.name.split(".")[-1].lower()
 
-        content = sanitize_text(content)  # ✅ FIX
+        # -------------------- Extract text from any file type --------------------
+        content = ""
+        try:
+            if file_ext in ["txt", "csv", "log"]:
+                try:
+                    content = file_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    content = file_bytes.decode("latin-1")
+            elif file_ext in ["docx"]:
+                with open(f"/tmp/{uploaded_file.name}", "wb") as f:
+                    f.write(file_bytes)
+                content = docx2txt.process(f"/tmp/{uploaded_file.name}")
+            elif file_ext in ["pdf"]:
+                reader = PyPDF2.PdfReader(uploaded_file)
+                for page in reader.pages:
+                    content += page.extract_text() or ""
+            else:
+                st.warning("Unsupported file type, attempting raw text decoding")
+                try:
+                    content = file_bytes.decode("utf-8")
+                except:
+                    content = file_bytes.decode("latin-1")
+        except Exception as e:
+            st.error(f"Failed to read file: {e}")
+
+        content = sanitize_text(content)  # ✅ sanitize
 
         file_hash = hashlib.sha256(content.encode()).hexdigest()
         db = SessionLocal()
@@ -168,13 +192,13 @@ else:
                 chunk_hash = hashlib.sha256(chunk.encode()).hexdigest()
                 embedding = embed_text(chunk)
 
-                # -------------------- FIXED INSERT --------------------
+                # ORM insert avoids NUL error
                 new_chunk = Chunk(
                     user_id=user_id,
                     document_id=document_id,
                     chunk_text=sanitize_text(chunk),
                     chunk_hash=chunk_hash,
-                    embedding=embedding  # ✅ pass as list of floats, ORM handles Vector
+                    embedding=embedding
                 )
                 db.add(new_chunk)
 
@@ -264,7 +288,7 @@ async def telegram_webhook(request: Request):
                 "embedding": query_embedding,
                 "top_k": top_k
             })
-            return [sanitize_text(row[0]) for row in result.fetchall()]  # ✅ FIX
+            return [sanitize_text(row[0]) for row in result.fetchall()]  # ✅ sanitize
 
     def call_llm(prompt: str):
         response = openai_client.chat.completions.create(
