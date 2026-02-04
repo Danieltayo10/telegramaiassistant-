@@ -1,7 +1,7 @@
 import os
 import requests
 from fastapi import FastAPI, Request
-from sqlalchemy import create_engine, Column, Integer, Text
+from sqlalchemy import create_engine, Column, Integer, Text, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 from pgvector.sqlalchemy import Vector
 from openai import OpenAI
@@ -48,9 +48,14 @@ class TelegramSession(Base):
     chat_id = Column(Text, primary_key=True)
     user_id = Column(Integer)
 
+# -------------------- 🔒 NUL-BYTE DEFENSE (THE FIX) --------------------
+@event.listens_for(Chunk, "before_insert")
+@event.listens_for(Chunk, "before_update")
+def sanitize_chunk_text(mapper, connection, target):
+    if target.chunk_text:
+        target.chunk_text = target.chunk_text.replace("\x00", "")
+
 # -------------------- DATABASE SETUP --------------------
-
-
 try:
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
@@ -58,12 +63,13 @@ try:
 except ProgrammingError:
     pass
 
-
-# Create tables if missing
 Base.metadata.create_all(engine)
 
 # -------------------- AI CLIENT --------------------
-openai_client = OpenAI(base_url="https://openrouter.ai/api/v1",api_key=OPENAI_API_KEY)
+openai_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENAI_API_KEY
+)
 
 def embed_text(text_value: str):
     return openai_client.embeddings.create(
@@ -138,7 +144,6 @@ async def telegram_webhook(request: Request):
 
     db = SessionLocal()
 
-    # /start <business_token>
     if text.startswith("/start"):
         parts = text.split(" ")
         if len(parts) < 2:
@@ -146,7 +151,10 @@ async def telegram_webhook(request: Request):
             return {"ok": True}
 
         token = parts[1]
-        user = db.execute(sql_text("SELECT * FROM users WHERE token=:t"), {"t": token}).fetchone()
+        user = db.execute(
+            sql_text("SELECT * FROM users WHERE token=:t"),
+            {"t": token}
+        ).fetchone()
 
         if not user:
             send_message(chat_id, "Invalid business token.")
